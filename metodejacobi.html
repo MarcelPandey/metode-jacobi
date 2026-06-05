@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalkulator Metode Jacobi - Enterprise</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Custom scrollbar untuk tabel */
+        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans antialiased min-h-screen">
+
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-3"></div>
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-extrabold text-blue-900 tracking-tight mb-2">Jacobi Method Solver</h1>
+            <p class="text-gray-500">Sistem Persamaan Linear dengan Analisis Konvergensi</p>
+        </header>
+
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 md:p-8 mb-8">
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 pb-6 border-b border-gray-100">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Dimensi Matriks (N x N)</label>
+                    <select id="matrix-size" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                        <option value="2">2 x 2</option>
+                        <option value="3" selected>3 x 3</option>
+                        <option value="4">4 x 4</option>
+                        <option value="5">5 x 5</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Toleransi Error (Epsilon)</label>
+                    <input type="number" id="tolerance" value="0.0001" step="0.00001" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Maksimum Iterasi</label>
+                    <input type="number" id="max-iterations" value="50" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                </div>
+            </div>
+
+            <div class="mb-8 overflow-x-auto">
+                <div class="flex items-start gap-8 min-w-max">
+                    <div class="flex-1">
+                        <h3 class="text-md font-bold text-gray-800 mb-3 text-center">Matriks Koefisien (A)</h3>
+                        <div id="matrix-A" class="grid gap-2 p-4 bg-gray-50 rounded-xl border border-gray-200"></div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-md font-bold text-gray-800 mb-3 text-center">Konstanta (b)</h3>
+                        <div id="vector-b" class="grid gap-2 p-4 bg-blue-50 rounded-xl border border-blue-100"></div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-md font-bold text-gray-800 mb-3 text-center">Tebakan Awal (x₀)</h3>
+                        <div id="vector-x0" class="grid gap-2 p-4 bg-green-50 rounded-xl border border-green-100"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-center gap-4">
+                <button onclick="calculateJacobi()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center gap-2">
+                    Hitung Sekarang
+                </button>
+                <button onclick="generateInputs()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 px-8 rounded-lg border border-gray-300 transition-all">
+                    Reset Nilai
+                </button>
+            </div>
+        </div>
+
+        <div id="output-section" class="hidden">
+            
+            <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden mb-8">
+                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50">
+                    <h2 class="text-xl font-bold text-gray-800">Riwayat Iterasi</h2>
+                </div>
+                <div class="p-0 table-container overflow-x-auto max-h-[400px]">
+                    <table class="w-full text-sm text-left whitespace-nowrap">
+                        <thead class="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
+                            <tr id="table-header">
+                                </tr>
+                        </thead>
+                        <tbody id="table-body" class="divide-y divide-gray-100">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-6 border-b pb-4">Grafik Konvergensi</h2>
+                <div class="relative h-[400px] w-full">
+                    <canvas id="convergenceChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let chartInstance = null;
+
+        // Inisialisasi awal saat DOM dimuat
+        document.addEventListener("DOMContentLoaded", () => {
+            generateInputs();
+            document.getElementById("matrix-size").addEventListener("change", generateInputs);
+        });
+
+        // Membuat grid input dinamis berdasarkan ukuran matriks
+        function generateInputs() {
+            const size = parseInt(document.getElementById("matrix-size").value);
+            const matrixA = document.getElementById("matrix-A");
+            const vectorb = document.getElementById("vector-b");
+            const vectorx0 = document.getElementById("vector-x0");
+
+            // Setup grid columns
+            matrixA.style.gridTemplateColumns = `repeat(${size}, minmax(0, 1fr))`;
+            vectorb.style.gridTemplateColumns = `1fr`;
+            vectorx0.style.gridTemplateColumns = `1fr`;
+
+            matrixA.innerHTML = '';
+            vectorb.innerHTML = '';
+            vectorx0.innerHTML = '';
+
+            for (let i = 0; i < size; i++) {
+                // Input Matriks A
+                for (let j = 0; j < size; j++) {
+                    matrixA.innerHTML += `
+                        <input type="number" id="a_${i}_${j}" step="any" placeholder="a${i+1}${j+1}" 
+                        class="w-20 text-center border border-gray-300 rounded-md py-2 focus:ring-2 focus:ring-blue-400 outline-none">`;
+                }
+                // Input Vektor b
+                vectorb.innerHTML += `
+                    <input type="number" id="b_${i}" step="any" placeholder="b${i+1}" 
+                    class="w-20 text-center border border-blue-300 rounded-md py-2 focus:ring-2 focus:ring-blue-400 outline-none">`;
+                // Input Tebakan Awal x0
+                vectorx0.innerHTML += `
+                    <input type="number" id="x0_${i}" step="any" value="0" placeholder="x${i+1}" 
+                    class="w-20 text-center border border-green-300 rounded-md py-2 focus:ring-2 focus:ring-green-400 outline-none">`;
+            }
+
+            document.getElementById("output-section").classList.add("hidden");
+        }
+
+        // Fungsi Toast Notification Elegan
+        function showToast(message, type = 'warning') {
+            const container = document.getElementById("toast-container");
+            const toast = document.createElement("div");
+            
+            const bgColors = {
+                warning: 'bg-yellow-100 border-yellow-400 text-yellow-800',
+                error: 'bg-red-100 border-red-400 text-red-800',
+                success: 'bg-green-100 border-green-400 text-green-800'
+            };
+
+            const icons = {
+                warning: '⚠️',
+                error: '❌',
+                success: '✅'
+            };
+
+            toast.className = `flex items-center gap-3 p-4 border-l-4 rounded shadow-lg transform transition-all duration-500 translate-x-full opacity-0 ${bgColors[type]}`;
+            toast.innerHTML = `<span class="text-xl">${icons[type]}</span> <p class="font-medium text-sm">${message}</p>`;
+            
+            container.appendChild(toast);
+
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove("translate-x-full", "opacity-0");
+            }, 10);
+
+            // Animate out
+            setTimeout(() => {
+                toast.classList.add("translate-x-full", "opacity-0");
+                setTimeout(() => toast.remove(), 500);
+            }, 5000);
+        }
+
+        // Validasi Matriks: Strictly Diagonally Dominant (SDD)
+        function checkDiagonallyDominant(A, size) {
+            let isSDD = true;
+            for (let i = 0; i < size; i++) {
+                let diagonalValue = Math.abs(A[i][i]);
+                let sumRow = 0;
+                for (let j = 0; j < size; j++) {
+                    if (i !== j) sumRow += Math.abs(A[i][j]);
+                }
+                if (diagonalValue <= sumRow) {
+                    isSDD = false;
+                    break;
+                }
+            }
+            return isSDD;
+        }
+
+        // Fungsi Utama Metode Jacobi
+        function calculateJacobi() {
+            const size = parseInt(document.getElementById("matrix-size").value);
+            const tol = parseFloat(document.getElementById("tolerance").value);
+            const maxIter = parseInt(document.getElementById("max-iterations").value);
+
+            let A = [];
+            let b = [];
+            let x = []; // Current values
+
+            // Ambil nilai dari DOM
+            for (let i = 0; i < size; i++) {
+                A[i] = [];
+                b[i] = parseFloat(document.getElementById(`b_${i}`).value) || 0;
+                x[i] = parseFloat(document.getElementById(`x0_${i}`).value) || 0;
+                for (let j = 0; j < size; j++) {
+                    A[i][j] = parseFloat(document.getElementById(`a_${i}_${j}`).value) || 0;
+                }
+                
+                // Mencegah pembagian dengan nol jika diagonal utama 0
+                if (A[i][i] === 0) {
+                    showToast(`Elemen diagonal A[${i+1}][${i+1}] bernilai 0. Metode Jacobi tidak dapat dilanjutkan.`, 'error');
+                    return;
+                }
+            }
+
+            // Validasi algoritma tanpa menghentikan paksa (Sesuai spesifikasi)
+            if (!checkDiagonallyDominant(A, size)) {
+                showToast("Peringatan: Matriks tidak Strictly Diagonally Dominant. Perhitungan mungkin tidak konvergen.", 'warning');
+            }
+
+            let history = [];
+            let currentIter = 0;
+            let maxError = Infinity;
+
+            // Catat tebakan awal (Iterasi 0)
+            history.push({ iter: 0, x: [...x], error: '-' });
+
+            // Looping Metode Jacobi
+            while (currentIter < maxIter && maxError > tol) {
+                let x_new = [];
+                maxError = 0;
+
+                for (let i = 0; i < size; i++) {
+                    let sum = 0;
+                    for (let j = 0; j < size; j++) {
+                        if (i !== j) {
+                            sum += A[i][j] * x[j];
+                        }
+                    }
+                    // Rumus Utama Jacobi
+                    x_new[i] = (b[i] - sum) / A[i][i];
+                    
+                    // Hitung Absolute Error untuk Kriteria Berhenti
+                    let error = Math.abs(x_new[i] - x[i]);
+                    if (error > maxError) maxError = error;
+                }
+
+                currentIter++;
+                x = [...x_new];
+                history.push({ iter: currentIter, x: [...x], error: maxError });
+            }
+
+            if(maxError <= tol) {
+                showToast(`Konvergen pada iterasi ke-${currentIter}`, 'success');
+            } else {
+                showToast(`Batas iterasi tercapai tanpa memenuhi toleransi error.`, 'warning');
+            }
+
+            renderOutput(history, size);
+        }
+
+        // Merender Tabel dan Grafik
+        function renderOutput(history, size) {
+            document.getElementById("output-section").classList.remove("hidden");
+
+            // --- Render Tabel ---
+            const thead = document.getElementById("table-header");
+            const tbody = document.getElementById("table-body");
+            
+            // Buat Header Tabel
+            let headerHTML = `<th class="px-6 py-4">Iterasi</th>`;
+            for (let i = 0; i < size; i++) {
+                headerHTML += `<th class="px-6 py-4">x${i+1}</th>`;
+            }
+            headerHTML += `<th class="px-6 py-4">Error Maks (Δ)</th>`;
+            thead.innerHTML = headerHTML;
+
+            // Buat Baris Tabel
+            let rowsHTML = '';
+            history.forEach(row => {
+                rowsHTML += `<tr class="hover:bg-gray-50 transition-colors border-b border-gray-50">
+                    <td class="px-6 py-3 font-semibold text-gray-900">${row.iter}</td>`;
+                
+                row.x.forEach(val => {
+                    rowsHTML += `<td class="px-6 py-3 text-gray-600">${val.toFixed(6)}</td>`;
+                });
+                
+                let errDisplay = row.error === '-' ? '-' : row.error.toFixed(6);
+                rowsHTML += `<td class="px-6 py-3 font-mono text-red-500">${errDisplay}</td></tr>`;
+            });
+            tbody.innerHTML = rowsHTML;
+
+            // --- Render Grafik Konvergensi (Chart.js) ---
+            renderChart(history, size);
+        }
+
+        function renderChart(history, size) {
+            const ctx = document.getElementById('convergenceChart').getContext('2d');
+            
+            // Hapus instance chart sebelumnya jika ada agar tidak tumpang tindih
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const labels = history.map(h => `Iter ${h.iter}`);
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+            const datasets = [];
+
+            for (let i = 0; i < size; i++) {
+                datasets.push({
+                    label: `x${i+1}`,
+                    data: history.map(h => h.x[i]),
+                    borderColor: colors[i % colors.length],
+                    backgroundColor: colors[i % colors.length],
+                    tension: 0.3, // Membuat garis sedikit melengkung
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointHoverRadius: 6
+                });
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        legend: { position: 'top' },
+                        tooltip: {
+                            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                            titleColor: '#1f2937',
+                            bodyColor: '#4b5563',
+                            borderColor: '#e5e7eb',
+                            borderWidth: 1,
+                            padding: 12,
+                            boxPadding: 4
+                        }
+                    },
+                    scales: {
+                        y: {
+                            title: { display: true, text: 'Nilai Variabel' },
+                            grid: { color: '#f3f4f6' }
+                        },
+                        x: {
+                            title: { display: true, text: 'Nomor Iterasi' },
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
